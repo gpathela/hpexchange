@@ -11,6 +11,7 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
+import { AccountLayout, Token, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import fs from 'mz/fs';
 import path from 'path';
 import * as borsh from 'borsh';
@@ -36,6 +37,11 @@ let payerAccount: Account;
  * Hello world's program id
  */
 let programId: PublicKey;
+
+/**
+ * Token Owner id
+ */
+let tokenOwnerId: PublicKey;
 
 /**
  * The public key of the account we are saying hello to
@@ -66,7 +72,7 @@ const PROGRAM_KEYPAIR_PATH = path.join(PROGRAM_PATH, 'helloworld-keypair.json');
  */
 class GreetingAccount {
   counter = 0;
-  constructor(fields: {counter: number} | undefined = undefined) {
+  constructor(fields: { counter: number } | undefined = undefined) {
     if (fields) {
       this.counter = fields.counter;
     }
@@ -77,7 +83,7 @@ class GreetingAccount {
  * Borsh schema definition for greeting accounts
  */
 const GreetingSchema = new Map([
-  [GreetingAccount, {kind: 'struct', fields: [['counter', 'u32']]}],
+  [GreetingAccount, { kind: 'struct', fields: [['counter', 'u32']] }],
 ]);
 
 /**
@@ -104,7 +110,7 @@ export async function establishConnection(): Promise<void> {
 export async function establishPayer(): Promise<void> {
   let fees = 0;
   if (!payerAccount) {
-    const {feeCalculator} = await connection.getRecentBlockhash();
+    const { feeCalculator } = await connection.getRecentBlockhash();
 
     // Calculate the cost to fund the greeter account
     fees += await connection.getMinimumBalanceForRentExemption(GREETING_SIZE);
@@ -148,6 +154,10 @@ export async function checkProgram(): Promise<void> {
   try {
     const programAccount = await readAccountFromFile(PROGRAM_KEYPAIR_PATH);
     programId = programAccount.publicKey;
+
+    const tokenOwner = await readAccountFromFile('/home/ubuntu/id.json');
+    tokenOwnerId = tokenOwner.publicKey;
+    console.log("Token owner is " + tokenOwnerId.toBase58());
   } catch (err) {
     const errMsg = (err as Error).message;
     throw new Error(
@@ -208,10 +218,19 @@ export async function checkProgram(): Promise<void> {
 /**
  * Say hello
  */
+const mintPubkey = new PublicKey("H3UUG2LKXMWoQLqFJL3g2J26o7jBFUErTQQpFT2uGPYP");
+const tokenAccount = new PublicKey("9kZBknDMoTGTpAy6GRFMrfwXz7HeNqtLoyqJdXA3uV1e");
+const pda = new PublicKey("6cdK5Kgtj7aeqJs3qSefSn25SCXrPfZsqjHsUqwJf7nM");
 export async function sayHello(): Promise<void> {
   console.log('Saying hello to', greetedPubkey.toBase58());
   const instruction = new TransactionInstruction({
-    keys: [{pubkey: greetedPubkey, isSigner: false, isWritable: true}],
+    keys: [
+      { pubkey: mintPubkey, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenOwnerId, isSigner: true, isWritable: true },
+      { pubkey: tokenAccount, isSigner: false, isWritable: true },
+      { pubkey: pda, isSigner: false, isWritable: false },
+    ],
     programId,
     data: Buffer.alloc(0), // All instructions are hellos
   });

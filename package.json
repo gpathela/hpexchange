@@ -24,6 +24,7 @@
     "postinstall": "cargo update --manifest-path=src/program-rust/Cargo.toml"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.1.5",
     "@solana/web3.js": "^1.7.0",
     "borsh": "^0.4.0",
     "mz": "^2.7.0",
