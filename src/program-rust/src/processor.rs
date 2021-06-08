@@ -35,6 +35,14 @@ impl Processor {
                 msg!("Instruction: Withdraw");
                 Self::process_withdraw(accounts, amount, program_id)
             }
+            ExchangeInstruction::Initbet { amount, odds } => {
+                msg!("Instruction: Initbet");
+                Self::process_initbet(accounts, amount, odds, program_id)
+            }
+            ExchangeInstruction::Settle { user_won } => {
+                msg!("Instruction: Initbet");
+                Self::process_settle(accounts, user_won, program_id)
+            }
         }
     }
 
@@ -156,6 +164,132 @@ impl Processor {
             ],
             &[&[&b"divvyexchange"[..], &[254]]],
         )?;
+
+        Ok(())
+    }
+
+    fn process_initbet(
+        accounts: &[AccountInfo],
+        amount: u64,
+        odds: u64,
+        program_id: &Pubkey,
+    ) -> ProgramResult {
+        msg!(
+            "Divvy program initbet with amount {} and odds {}",
+            amount,
+            odds
+        );
+        let accounts_iter = &mut accounts.iter();
+        let initializer = next_account_info(accounts_iter)?;
+
+        if !initializer.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        let token_program = next_account_info(accounts_iter)?;
+        let temp_token_account = next_account_info(accounts_iter)?;
+        let pda_account = next_account_info(accounts_iter)?;
+        let hp_usdt_account = next_account_info(accounts_iter)?;
+
+        let owner_change_ix = spl_token::instruction::set_authority(
+            token_program.key,
+            temp_token_account.key,
+            Some(&pda_account.key),
+            spl_token::instruction::AuthorityType::AccountOwner,
+            initializer.key,
+            &[&initializer.key],
+        )?;
+
+        msg!("Calling the token program to transfer token account ownership...");
+        invoke(
+            &owner_change_ix,
+            &[
+                temp_token_account.clone(),
+                initializer.clone(),
+                token_program.clone(),
+            ],
+        )?;
+
+        //Transfer token from pool account to bet temp account
+        let transfer_instruction = transfer(
+            &token_program.key,
+            &hp_usdt_account.key,
+            &temp_token_account.key,
+            &pda_account.key,
+            &[&pda_account.key],
+            amount.clone(),
+        )?;
+        msg!("Calling the token program to transfer tokens...");
+        invoke_signed(
+            &transfer_instruction,
+            &[
+                hp_usdt_account.clone(),
+                temp_token_account.clone(),
+                pda_account.clone(),
+                token_program.clone(),
+            ],
+            &[&[&b"divvyexchange"[..], &[254]]],
+        )?;
+
+        Ok(())
+    }
+
+    fn process_settle(
+        accounts: &[AccountInfo],
+        user_won: bool,
+        program_id: &Pubkey,
+    ) -> ProgramResult {
+        let accounts_iter = &mut accounts.iter();
+        let initializer = next_account_info(accounts_iter)?;
+        let token_program = next_account_info(accounts_iter)?;
+        let temp_token_account = next_account_info(accounts_iter)?;
+        let pda_account = next_account_info(accounts_iter)?;
+        let hp_usdt_account = next_account_info(accounts_iter)?;
+        let user_usdt_account = next_account_info(accounts_iter)?;
+
+        let temp_token_account_info = TokenAccount::unpack(&temp_token_account.data.borrow())?;
+
+        if user_won == true {
+            let transfer_instruction = transfer(
+                &token_program.key,
+                &temp_token_account.key,
+                &user_usdt_account.key,
+                &pda_account.key,
+                &[&pda_account.key],
+                temp_token_account_info.amount,
+            )?;
+            msg!("Calling the token program to transfer tokens to user");
+            invoke_signed(
+                &transfer_instruction,
+                &[
+                    user_usdt_account.clone(),
+                    temp_token_account.clone(),
+                    pda_account.clone(),
+                    token_program.clone(),
+                ],
+                &[&[&b"divvyexchange"[..], &[254]]],
+            )?;
+        } else {
+            //Transfer token from bet temp account to pool account as hp has won
+            let transfer_instruction = transfer(
+                &token_program.key,
+                &temp_token_account.key,
+                &hp_usdt_account.key,
+                &pda_account.key,
+                &[&pda_account.key],
+                temp_token_account_info.amount,
+            )?;
+            msg!("Calling the token program to transfer tokens to hp pool");
+            invoke_signed(
+                &transfer_instruction,
+                &[
+                    temp_token_account.clone(),
+                    hp_usdt_account.clone(),
+                    pda_account.clone(),
+                    token_program.clone(),
+                ],
+                &[&[&b"divvyexchange"[..], &[254]]],
+            )?;
+        }
 
         Ok(())
     }

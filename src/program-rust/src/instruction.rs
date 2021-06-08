@@ -24,6 +24,16 @@ pub enum ExchangeInstruction {
         /// the amount the taker expects to be paid in the other token, as a u64 because that's the max possible supply of a token
         amount: u64,
     },
+
+    //Init Bet
+    Initbet {
+        amount: u64,
+        odds: u64,
+    },
+    //Settle Bet
+    Settle {
+        user_won: bool,
+    },
 }
 
 impl ExchangeInstruction {
@@ -38,6 +48,13 @@ impl ExchangeInstruction {
             1 => Self::Withdraw {
                 amount: Self::unpack_amount(rest)?,
             },
+            2 => Self::Initbet {
+                amount: Self::unpack_amount(rest)?,
+                odds: Self::unpack_odds(rest)?,
+            },
+            3 => Self::Settle {
+                user_won: Self::unpack_result(rest)?,
+            },
             _ => return Err(InvalidInstruction.into()),
         })
     }
@@ -49,5 +66,24 @@ impl ExchangeInstruction {
             .map(u64::from_le_bytes)
             .ok_or(InvalidInstruction)?;
         Ok(amount)
+    }
+
+    fn unpack_odds(input: &[u8]) -> Result<u64, ProgramError> {
+        let odds = input
+            .get(8..16)
+            .and_then(|slice| slice.try_into().ok())
+            .map(u64::from_le_bytes)
+            .ok_or(InvalidInstruction)?;
+        Ok(odds)
+    }
+
+    fn unpack_result(input: &[u8]) -> Result<bool, ProgramError> {
+        let (tag, _rest) = input.split_last().ok_or(InvalidInstruction)?;
+
+        if *tag == 1 {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
