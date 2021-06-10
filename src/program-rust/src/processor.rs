@@ -40,7 +40,7 @@ impl Processor {
                 Self::process_initbet(accounts, amount, odds, program_id)
             }
             ExchangeInstruction::Settle { user_won } => {
-                msg!("Instruction: Initbet");
+                msg!("Instruction: Settle");
                 Self::process_settle(accounts, user_won, program_id)
             }
         }
