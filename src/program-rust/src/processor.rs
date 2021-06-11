@@ -15,7 +15,7 @@ use spl_token::instruction::{burn, mint_to, transfer};
 use spl_token::state::Account as TokenAccount;
 //use spl_token::ID;
 
-use crate::{error::ExchangeError, instruction::ExchangeInstruction, state::Escrow};
+use crate::instruction::ExchangeInstruction;
 
 pub struct Processor;
 impl Processor {
